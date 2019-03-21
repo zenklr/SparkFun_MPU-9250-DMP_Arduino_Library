@@ -19,7 +19,15 @@ Supported Platforms:
 #define _SPARKFUN_MPU9250_DMP_H_
 
 #include <Wire.h>
+#include <SPI.h>
 #include <Arduino.h>
+
+#define READ_FLAG 0x80
+#define NOT_SPI -1
+#define SPI_DATA_RATE 1000000 // 1MHz is the max speed of the MPU-9250
+#define SPI_MODE SPI_MODE3
+
+#define _csPin 10
 
 // Optimally, these defines would be passed as compiler options, but Arduino
 // doesn't give us a great way to do that.
@@ -56,6 +64,15 @@ enum t_axisOrder {
 
 #define MAX_DMP_SAMPLE_RATE 200 // Maximum sample rate for the DMP FIFO (200Hz)
 #define FIFO_BUFFER_SIZE 512 // Max FIFO buffer size
+
+uint8_t writeByteSPI(uint8_t registerAddress, uint8_t writeData);
+uint8_t readByteSPI(uint8_t registerAddress);
+void select();
+void deselect();
+int test_read(unsigned char slave_addr, unsigned char reg_addr,
+                       unsigned char length, unsigned char * data);
+int test_write(unsigned char slave_addr, unsigned char reg_addr,
+                       unsigned char length, unsigned char * data);
 
 const signed char defaultOrientation[9] = {
 	1, 0, 0,

@@ -40,8 +40,8 @@
 #define MPU9250
 #include "arduino_mpu9250_i2c.h"
 #include "arduino_mpu9250_clk.h"
-#define i2c_write(a, b, c, d) arduino_i2c_write(a, b, c, d)
-#define i2c_read(a, b, c, d)  arduino_i2c_read(a, b, c, d)
+#define i2c_write(a, b, c, d) arduino_spi_write(a, b, c, d)
+#define i2c_read(a, b, c, d)  arduino_spi_read(a, b, c, d)
 #define delay_ms  arduino_delay_ms
 #define get_ms    arduino_get_clock_ms
 #define log_i     _MLPrintLog
@@ -708,10 +708,11 @@ int mpu_init(struct int_param_s *int_param)
         reg_int_cb(int_param);
 #endif
 
+// TODO compass fix using compass with SPI, setup return_compass returns -1
 #ifdef AK89xx_SECONDARY
     setup_compass();
     if (mpu_set_compass_sample_rate(10))
-        return -1;
+        //return -1;
 #else
     /* Already disabled by setup_compass. */
     if (mpu_set_bypass(0))

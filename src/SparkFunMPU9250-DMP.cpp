@@ -17,6 +17,7 @@ Supported Platforms:
 ******************************************************************************/
 #include "SparkFunMPU9250-DMP.h"
 #include "MPU9250_RegisterMap.h"
+#include <SPI.h>
 
 extern "C" {
 #include "util/inv_mpu.h"
@@ -41,10 +42,67 @@ inv_error_t MPU9250_DMP::begin(void)
 	inv_error_t result;
     struct int_param_s int_param;
 	
-	Wire.begin();
+	//Wire.begin();
+	SPI.begin();
+	pinMode(_csPin, OUTPUT);
+	digitalWrite(_csPin, HIGH);
+    deselect();
+
+	// Kick Hardware
+	SPI.beginTransaction(SPISettings(SPI_DATA_RATE, MSBFIRST, SPI_MODE));
+  	SPI.transfer(0x00); // Send null byte
+  	SPI.endTransaction();
+	Serial.println("hardware kicked");
 	
+	// TODO merge mpu_init with individual register writes 
 	result = mpu_init(&int_param);
-	
+
+	// Reset registers to defaults, bit auto clears
+	writeByteSPI( 0x6B, 0x80);
+	// Auto select the best available clock source
+	writeByteSPI( 0x6B, 0x01);
+	// Enable X,Y, & Z axes of accel and gyro
+	writeByteSPI( 0x6C, 0x00);
+	// Config disable FSYNC pin, set gyro/temp bandwidth to 184/188 Hz
+	writeByteSPI( 0x1A, 0x01);
+	// Self tests off, gyro set to +/-2000 dps FS
+	writeByteSPI( 0x1B, 0x18);
+	// Self test off, accel set to +/- 8g FS
+	writeByteSPI( 0x1C, 0x08);
+	// Bypass DLPF and set accel bandwidth to 184 Hz
+	writeByteSPI( 0x1D, 0x09);
+	// Configure INT pin (active high / push-pull / latch until read)
+	writeByteSPI( 0x37, 0x30);
+	// Enable I2C master mode
+	// TODO Why not do this 11-100 ms after power up?
+//TODO eanble FIFO?
+	writeByteSPI( 0x6A, 0x20);
+	// Disable multi-master and set I2C master clock to 400 kHz
+	//https://developer.mbed.org/users/kylongmu/code/MPU9250_SPI/ calls says
+	// enabled multi-master... TODO Find out why
+	writeByteSPI( 0x24, 0x0D);
+	// Set to write to slave address 0x0C
+	writeByteSPI( 0x25, 0x0C);
+	// Point save 0 register at AK8963's control 2 (soft reset) register
+	writeByteSPI( 0x26, 0x0B);
+	// Send 0x01 to AK8963 via slave 0 to trigger a soft restart
+	writeByteSPI( 0x63, 0x01);
+	// Enable simple 1-byte I2C reads from slave 0
+	writeByteSPI( 0x27, 0x81);
+	// Point save 0 register at AK8963's control 1 (mode) register
+	writeByteSPI( 0x26, 0x0A);
+	// 16-bit continuous measurement mode 1
+	writeByteSPI( 0x63, 0x12);
+	// Enable simple 1-byte I2C reads from slave 0
+	writeByteSPI( 0x27, 0x81);
+
+	// Read the WHO_AM_I register, this is a good test of communication
+  	byte c = readByteSPI(0x75);
+  	Serial.print(F("MPU9250 I AM 0x"));
+  	Serial.print(c, HEX);
+  	Serial.print(F(" I should be 0x"));
+  	Serial.println(0x71, HEX);
+
 	if (result)
 		return result;
 	
@@ -56,6 +114,44 @@ inv_error_t MPU9250_DMP::begin(void)
 	_aSense = getAccelSens();
 	
 	return result;
+}
+
+uint8_t writeByteSPI(uint8_t registerAddress, uint8_t writeData)
+{
+	uint8_t returnVal;
+	SPI.beginTransaction(SPISettings(SPI_DATA_RATE, MSBFIRST, SPI_MODE));
+	select();
+
+	SPI.transfer(registerAddress);
+	returnVal = SPI.transfer(writeData);
+
+	deselect();
+	SPI.endTransaction();
+
+	// For debugging purposes
+	/*
+	Serial.print("MPU9250::writeByteSPI slave returned: 0x");
+    Serial.println(returnVal, HEX);
+	*/
+
+	return returnVal;
+}
+
+uint8_t readByteSPI(uint8_t registerAddress)
+{
+  return writeByteSPI(registerAddress | READ_FLAG, 0xFF /*0xFF is arbitrary*/);
+}
+
+// Select slave IC by asserting CS pin
+void select()
+{
+	digitalWrite(_csPin, LOW);
+}
+
+// Select slave IC by deasserting CS pin
+void deselect()
+{
+	digitalWrite(_csPin, HIGH);
 }
 
 inv_error_t MPU9250_DMP::enableInterrupt(unsigned char enable)
